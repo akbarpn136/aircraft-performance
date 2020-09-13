@@ -1,2 +1,2 @@
-# aircraft-performance
-Repositori awal kalkulasi peforma pesawat terbang
+# Aircraft Performance Calculation
+Repositori awal kalkulasi performa pesawat terbang
