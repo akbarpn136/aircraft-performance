@@ -1,2 +1,11 @@
-openpyxl==3.0.5
+dask==2.26.0
+fsspec==0.8.2
+locket==0.2.0
 numpy==1.19.2
+pandas==1.1.2
+partd==1.1.0
+python-dateutil==2.8.1
+pytz==2020.1
+PyYAML==5.3.1
+six==1.15.0
+toolz==0.10.0
