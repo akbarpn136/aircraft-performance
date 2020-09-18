@@ -9,33 +9,49 @@ def load_data(projectname):
     df = dd.read_csv(f"data/{projectname}/run*.csv", sep="\t", header=None, names=kolom)
     df = df[["RUN", "ALPHA", "CL", "CD", "CM25"]]
 
-    # CLCG20 CLCG25 CLCG30 CLCG35 merupakan variabel untuk variasi CM terhadap CG masing-masing 20%, 25%, 30% dan 35%
-    # dalam perhitungan CL trim
-    df["CLCG20"] = df["CM25"] + (0.20 - 0.25) * df["CL"]
-    df["CLCG20_TRIM"] = df["CL"].diff(-1).fillna(0) / df["CLCG20"].diff(-1).fillna(0) * -1 * df["CLCG20"] + df["CL"]
+    return df
 
-    df["CLCG25"] = df["CM25"] + (0.25 - 0.25) * df["CL"]
-    df["CLCG25_TRIM"] = df["CL"].diff(-1).fillna(0) / df["CLCG25"].diff(-1).fillna(0) * -1 * df["CLCG25"] + df["CL"]
 
-    df["CLCG30"] = df["CM25"] + (0.30 - 0.25) * df["CL"]
-    df["CLCG30_TRIM"] = df["CL"].diff(-1).fillna(0) / df["CLCG30"].diff(-1).fillna(0) * -1 * df["CLCG30"] + df["CL"]
+def column_builder(df, start=20, stop=40, step=5):
+    import numpy as np
 
-    df["CLCG35"] = df["CM25"] + (0.35 - 0.25) * df["CL"]
-    df["CLCG35_TRIM"] = df["CL"].diff(-1).fillna(0) / df["CLCG35"].diff(-1).fillna(0) * -1 * df["CLCG35"] + df["CL"]
+    # Membuat rentang array yang diperlukan
+    variance = np.arange(start, stop, step)
 
-    # CDCG20 CDCG25 CDCG30 CDCG35 merupakan variabel untuk variasi CM terhadap CG masing-masing 20%, 25%, 30% dan 35%
-    # dalam perhitungan CD trim
-    df["CDCG20"] = df["CM25"] + (0.20 - 0.25) * df["CD"]
-    df["CDCG20_TRIM"] = df["CD"].diff(-1).fillna(0) / df["CDCG20"].diff(-1).fillna(0) * -1 * df["CDCG20"] + df["CD"]
+    # Pembuatan kolom tabel dinamik pertama
+    columns = {}
+    coef = ["CLCG", "CDCG"]
+    name = [f'{c}_{var}' for c in coef for var in variance]  # membuat kombinasi nama dan % CG kedalam list
+    for cols in name:
+        if "CL" in cols:
+            # Lakukan perhitungan untuk variasi CG sesuai perhitungan excel bagian CL
+            columns[cols] = lambda row: row["CM25"] + (int(cols[-2:]) / 100 - 0.25) * df["CL"]
 
-    df["CDCG25"] = df["CM25"] + (0.25 - 0.25) * df["CD"]
-    df["CDCG25_TRIM"] = df["CD"].diff(-1).fillna(0) / df["CDCG25"].diff(-1).fillna(0) * -1 * df["CDCG25"] + df["CD"]
+        else:
+            # Lakukan perhitungan untuk variasi CG sesuai perhitungan excel bagian CD
+            columns[cols] = lambda row: row["CM25"] + (int(cols[-2:]) / 100 - 0.25) * df["CD"]
 
-    df["CDCG30"] = df["CM25"] + (0.30 - 0.25) * df["CD"]
-    df["CDCG30_TRIM"] = df["CD"].diff(-1).fillna(0) / df["CDCG30"].diff(-1).fillna(0) * -1 * df["CDCG30"] + df["CD"]
+    # Tambahkan kolom dinamik ke dataframe
+    df = df.assign(**columns)
 
-    df["CDCG35"] = df["CM25"] + (0.35 - 0.25) * df["CD"]
-    df["CDCG35_TRIM"] = df["CD"].diff(-1).fillna(0) / df["CDCG35"].diff(-1).fillna(0) * -1 * df["CDCG35"] + df["CD"]
+    # Pembuatan kolom tabel dinamik kedua (kondisi trim)
+    columns_trim = {}
+    coef_trim = ["CLCG_TRIM", "CDCG_TRIM"]
+    name_trim = [f'{c}_{var}' for c in coef_trim for var in variance]  # membuat kombinasi nama dan % CG kedalam list
+    for cols in name_trim:
+        if "CL" in cols:
+            # Lakukan perhitungan untuk kondisi TRIM CG sesuai perhitungan excel bagian CL
+            cl = cols.replace("_TRIM", "")
+            columns_trim[cols] = lambda row: row["CL"].diff(-1).fillna(0) / row[cl].diff(-1).fillna(0) * -1 * \
+                                             row[cl] + row["CL"]
+
+        elif "CD" in cols:
+            # Lakukan perhitungan untuk kondisi TRIM CG sesuai perhitungan excel bagian CD
+            cd = cols.replace("_TRIM", "")
+            columns_trim[cols] = lambda row: row["CD"].diff(-1).fillna(0) / row[cd].diff(-1).fillna(0) * -1 \
+                                             * row[cd] + row["CD"]
+
+    df = df.assign(**columns_trim)
 
     return df.drop(["ALPHA", "CL", "CD", "CM25"], axis=1)
 
@@ -78,8 +94,13 @@ def process():
     # Memuat keseluruhan data windtunnel berupa RUN numbers berdasarkan nama pesawat
     df = load_data("male")
 
+    # Membuat kolom dinamis sesuai variasi CG yang diinginkan misalkan 20 untuk 20% dan seterusnya
+    df = column_builder(df, 20, 40)
+
+    df.to_csv("result*.csv")
+
     # Tampilkan hasil perhitungan ke terminal
-    print(calc_trim(df).compute())
+    # print(calc_trim(df).compute())
 
 
 if __name__ == "__main__":
