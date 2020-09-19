@@ -13,6 +13,8 @@ def load_data(projectname):
 
 
 def column_builder(df, start=20, stop=40, step=5):
+    """Fungsi ini digunakan untuk membangun tabel dengan kolom dinamis dalam bentuk dataframe"""
+
     import numpy as np
 
     # Membuat rentang array yang diperlukan
@@ -36,18 +38,18 @@ def column_builder(df, start=20, stop=40, step=5):
 
     # Pembuatan kolom tabel dinamik kedua (kondisi trim)
     columns_trim = {}
-    coef_trim = ["CLCG_TRIM", "CDCG_TRIM"]
+    coef_trim = ["TRIM_CLCG", "TRIM_CDCG"]
     name_trim = [f'{c}_{var}' for c in coef_trim for var in variance]  # membuat kombinasi nama dan % CG kedalam list
     for cols in name_trim:
         if "CL" in cols:
             # Lakukan perhitungan untuk kondisi TRIM CG sesuai perhitungan excel bagian CL
-            cl = cols.replace("_TRIM", "")
+            cl = cols.replace("TRIM_", "")
             columns_trim[cols] = lambda row: row["CL"].diff(-1).fillna(0) / row[cl].diff(-1).fillna(0) * -1 * \
                                              row[cl] + row["CL"]
 
         elif "CD" in cols:
             # Lakukan perhitungan untuk kondisi TRIM CG sesuai perhitungan excel bagian CD
-            cd = cols.replace("_TRIM", "")
+            cd = cols.replace("TRIM_", "")
             columns_trim[cols] = lambda row: row["CD"].diff(-1).fillna(0) / row[cd].diff(-1).fillna(0) * -1 \
                                              * row[cd] + row["CD"]
 
@@ -56,20 +58,26 @@ def column_builder(df, start=20, stop=40, step=5):
     return df.drop(["ALPHA", "CL", "CD", "CM25"], axis=1)
 
 
-def __get_trim_data(df, column_name):
-    """Fungsi ini digunakan untuk mendeteksi perubahan tanda positif dan negatif dalam kolom yang didefinisikan dan
-    dibuat private function"""
-
-    sign = df[column_name].map(da.sign)  # mencari pola tanda positif negatif dalam kolom
-    diff_positive = sign.diff(periods=-1).fillna(0)  # mencari indeks dengan tanda positif dalam kolom sebelumnya
-    df_positive = df.loc[diff_positive[diff_positive != 0].index]  # baca dataframe berdasarkan indeks positif tadi
-    df_positive = df_positive[["RUN", f"{column_name}_TRIM"]].head(1)  # pilih kolom yang ditampilkan dan tampilkan satu
-
-    return df_positive
-
-
 def calc_trim(df):
     """Fungsi ini digunakan untuk menghitung koefisien kondisi trim"""
+
+    def __get_trim_data(data, column_name):
+        """Fungsi ini digunakan untuk mendeteksi perubahan tanda positif dan negatif dalam kolom yang didefinisikan dan
+        dibuat private function"""
+
+        # mencari pola tanda positif negatif dalam kolom
+        sign = data[column_name].map(da.sign)
+
+        # mencari indeks dengan tanda positif dalam kolom sebelumnya
+        diff_positive = sign.diff(periods=-1).fillna(0)
+
+        # baca dataframe berdasarkan indeks positif tadi
+        df_positive = data.loc[diff_positive[diff_positive != 0].index]
+
+        # pilih kolom yang ditampilkan dan tampilkan satu
+        df_positive = df_positive[["RUN", f"TRIM_{column_name}"]].head(1)
+
+        return df_positive
 
     # Lakukan perhitungan CL trim per data RUN
     clcg20_trim = df.map_partitions(__get_trim_data, "CLCG20")
@@ -95,9 +103,11 @@ def process():
     df = load_data("male")
 
     # Membuat kolom dinamis sesuai variasi CG yang diinginkan misalkan 20 untuk 20% dan seterusnya
-    df = column_builder(df, 20, 40)
+    df = column_builder(df, 20, 25)
 
-    df.to_csv("result*.csv")
+    print(df.columns)
+
+    # df.to_csv("result*.csv")
 
     # Tampilkan hasil perhitungan ke terminal
     # print(calc_trim(df).compute())
