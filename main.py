@@ -66,7 +66,7 @@ def calc_trim(df):
 
     df = df.map_partitions(__get_trim_data, unique_columns)
 
-    return df.compute()
+    return unique_columns, df.compute()
 
 
 def process():
@@ -74,8 +74,8 @@ def process():
     df = load_data("male")
 
     # Membuat kolom dinamis sesuai variasi CG yang diinginkan misalkan 20 untuk 20% dan seterusnya
-    df = column_builder(df, 20, 40)
-    df.to_csv("result*.csv")
+    df = column_builder(df, 20, 30)
+    print(calc_trim(df))
 
 
 if __name__ == "__main__":
