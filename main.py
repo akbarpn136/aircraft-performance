@@ -19,46 +19,19 @@ def column_builder(df, start=20, stop=40, step=5):
 
     # Membuat rentang array yang diperlukan
     variance = np.arange(start, stop, step)
+    coef = ["CLCG", "CDCG", "TRIM_CLCG", "TRIM_CDCG"]
+    column_names = [f'{c}_{var}' for c in coef for var in variance]  # membuat kombinasi nama dan % CG kedalam list
 
-    # Pembuatan kolom tabel dinamik pertama
-    columns = {}
-    coef = ["CLCG", "CDCG"]
-    name = [f'{c}_{var}' for c in coef for var in variance]  # membuat kombinasi nama dan % CG kedalam list
+    for col in column_names:
+        cg_position = int(col[-2:]) / 100
+        coef_selection = col[:2]
 
-    for cols in name:
-        cg_position = int(cols[-2:]) / 100
-
-        if "CL" in cols:
-            cl = cols
-            # Lakukan perhitungan untuk variasi CG sesuai perhitungan excel bagian CL
-            columns[cl] = lambda row: row["CM25"] + (cg_position - 0.25) * df["CL"]
-
+        if "TRIM_" in col:
+            cg_name = col.replace("TRIM_", "")
+            df[col] = df[cg_name[:2]].diff(-1).fillna(0) / df[cg_name].diff(-1).fillna(0) * -1 * df[cg_name] + df[
+                cg_name[:2]]
         else:
-            cd = cols
-            # Lakukan perhitungan untuk variasi CG sesuai perhitungan excel bagian CD
-            columns[cd] = lambda row: row["CM25"] + (cg_position - 0.25) * df["CD"]
-
-    # Tambahkan kolom dinamik ke dataframe
-    df = df.assign(**columns)
-
-    # Pembuatan kolom tabel dinamik kedua (kondisi trim)
-    columns_trim = {}
-    coef_trim = ["TRIM_CLCG", "TRIM_CDCG"]
-    name_trim = [f'{c}_{var}' for c in coef_trim for var in variance]  # membuat kombinasi nama dan % CG kedalam list
-    for cols in name_trim:
-        if "CL" in cols:
-            # Lakukan perhitungan untuk kondisi TRIM CG sesuai perhitungan excel bagian CL
-            cl = cols.replace("TRIM_", "")
-            columns_trim[cols] = lambda row: row["CL"].diff(-1).fillna(0) / row[cl].diff(-1).fillna(0) * -1 * \
-                                             row[cl] + row["CL"]
-
-        elif "CD" in cols:
-            # Lakukan perhitungan untuk kondisi TRIM CG sesuai perhitungan excel bagian CD
-            cd = cols.replace("TRIM_", "")
-            columns_trim[cols] = lambda row: row["CD"].diff(-1).fillna(0) / row[cd].diff(-1).fillna(0) * -1 \
-                                             * row[cd] + row["CD"]
-
-    df = df.assign(**columns_trim)
+            df[col] = df["CM25"] + (cg_position - 0.25) * df[coef_selection]
 
     return df.drop(["ALPHA", "CL", "CD", "CM25"], axis=1)
 
@@ -93,7 +66,7 @@ def calc_trim(df):
 
     df = df.map_partitions(__get_trim_data, unique_columns)
 
-    return df.compute()
+    return unique_columns, df.compute()
 
 
 def process():
@@ -102,7 +75,7 @@ def process():
 
     # Membuat kolom dinamis sesuai variasi CG yang diinginkan misalkan 20 untuk 20% dan seterusnya
     df = column_builder(df, 20, 30)
-    df.to_csv("result*.csv")
+    print(calc_trim(df))
 
 
 if __name__ == "__main__":
