@@ -24,14 +24,19 @@ def column_builder(df, start=20, stop=40, step=5):
     columns = {}
     coef = ["CLCG", "CDCG"]
     name = [f'{c}_{var}' for c in coef for var in variance]  # membuat kombinasi nama dan % CG kedalam list
+
     for cols in name:
+        cg_position = int(cols[-2:]) / 100
+
         if "CL" in cols:
+            cl = cols
             # Lakukan perhitungan untuk variasi CG sesuai perhitungan excel bagian CL
-            columns[cols] = lambda row: row["CM25"] + (int(cols[-2:]) / 100 - 0.25) * df["CL"]
+            columns[cl] = lambda row: row["CM25"] + (cg_position - 0.25) * df["CL"]
 
         else:
+            cd = cols
             # Lakukan perhitungan untuk variasi CG sesuai perhitungan excel bagian CD
-            columns[cols] = lambda row: row["CM25"] + (int(cols[-2:]) / 100 - 0.25) * df["CD"]
+            columns[cd] = lambda row: row["CM25"] + (cg_position - 0.25) * df["CD"]
 
     # Tambahkan kolom dinamik ke dataframe
     df = df.assign(**columns)
@@ -61,41 +66,34 @@ def column_builder(df, start=20, stop=40, step=5):
 def calc_trim(df):
     """Fungsi ini digunakan untuk menghitung koefisien kondisi trim"""
 
-    def __get_trim_data(data, column_name):
+    unique_columns = list(set([col.replace("TRIM_", "") for col in df.columns.values if col != "RUN"]))
+
+    def __get_trim_data(data, column_names):
         """Fungsi ini digunakan untuk mendeteksi perubahan tanda positif dan negatif dalam kolom yang didefinisikan dan
         dibuat private function"""
 
-        # mencari pola tanda positif negatif dalam kolom
-        sign = data[column_name].map(da.sign)
+        trim = []
 
-        # mencari indeks dengan tanda positif dalam kolom sebelumnya
-        diff_positive = sign.diff(periods=-1).fillna(0)
+        for col in column_names:
+            # mencari pola tanda positif negatif dalam kolom
+            sign = data[col].map(da.sign)
 
-        # baca dataframe berdasarkan indeks positif tadi
-        df_positive = data.loc[diff_positive[diff_positive != 0].index]
+            # mencari indeks dengan tanda positif dalam kolom sebelumnya
+            diff_positive = sign.diff(periods=-1).fillna(0)
 
-        # pilih kolom yang ditampilkan dan tampilkan satu
-        df_positive = df_positive[["RUN", f"TRIM_{column_name}"]].head(1)
+            # baca dataframe berdasarkan indeks positif tadi
+            df_positive = data.loc[diff_positive[diff_positive != 0].index]
 
-        return df_positive
+            # pilih kolom yang ditampilkan dan tampilkan satu
+            df_positive = df_positive[f"TRIM_{col}"].head(1).values
 
-    # Lakukan perhitungan CL trim per data RUN
-    clcg20_trim = df.map_partitions(__get_trim_data, "CLCG20")
-    clcg25_trim = df.map_partitions(__get_trim_data, "CLCG25")
-    clcg30_trim = df.map_partitions(__get_trim_data, "CLCG30")
-    clcg35_trim = df.map_partitions(__get_trim_data, "CLCG35")
+            trim.append(df_positive)
 
-    # Lakukan perhitungan CD trim per data RUN
-    cdcg20_trim = df.map_partitions(__get_trim_data, "CDCG20")
-    cdcg25_trim = df.map_partitions(__get_trim_data, "CDCG25")
-    cdcg30_trim = df.map_partitions(__get_trim_data, "CDCG30")
-    cdcg35_trim = df.map_partitions(__get_trim_data, "CDCG35")
+        return da.concatenate(trim, axis=0).compute()
 
-    # Gabung banyak dataframe melalui merge
-    trim = clcg20_trim.merge(clcg25_trim).merge(clcg30_trim).merge(clcg35_trim).merge(cdcg20_trim).merge(
-        cdcg25_trim).merge(cdcg30_trim).merge(cdcg35_trim)
+    df = df.map_partitions(__get_trim_data, unique_columns)
 
-    return trim
+    return df.compute()
 
 
 def process():
@@ -103,14 +101,8 @@ def process():
     df = load_data("male")
 
     # Membuat kolom dinamis sesuai variasi CG yang diinginkan misalkan 20 untuk 20% dan seterusnya
-    df = column_builder(df, 20, 25)
-
-    print(df.columns)
-
-    # df.to_csv("result*.csv")
-
-    # Tampilkan hasil perhitungan ke terminal
-    # print(calc_trim(df).compute())
+    df = column_builder(df, 20, 30)
+    df.to_csv("result*.csv")
 
 
 if __name__ == "__main__":
