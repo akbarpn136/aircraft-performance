@@ -4,10 +4,14 @@ from dask import (dataframe as dd, array as da)
 def load_data(projectname):
     """Fungsi untuk baca dan olah data"""
 
-    kolom = ["RUN", "V0", "Q0", "ALPHA", "BETA", "CL", "CD", "CM25", "CY", "CYAW", "CROLL"]
+    start = 32
+    kolom = ["V0", "Q0", "ALPHA", "BETA", "CL", "CD", "CM25", "CY", "CYAW", "CROLL"]
 
-    df = dd.read_csv(f"data/{projectname}/run*.csv", sep="\t", header=None, names=kolom)
-    df = df[["RUN", "ALPHA", "CL", "CD", "CM25"]]
+    df = dd.read_fwf(f"data/{projectname}/print*", header=None, skiprows=start, skipfooter=2, include_path_column=True,
+                     names=kolom)
+    df = df[["path", "ALPHA", "CL", "CD", "CM25"]]
+    df["RUN"] = df["path"].apply(lambda x: x.split("/")[-1], meta=("path", "string"))
+    df = df.drop(["path"], axis=1)
 
     return df
 
@@ -77,7 +81,14 @@ def process():
 
     # Membuat kolom dinamis sesuai variasi CG yang diinginkan misalkan 20 untuk 20% dan seterusnya
     df = column_builder(df, 20, 30)
-    print(calc_trim(df).tolist())
+
+    try:
+        trim = calc_trim(df).tolist()
+        clean_trim = [i for i in trim if i]
+        print(clean_trim)
+
+    except ValueError:
+        print("Ada kesalahan saat Parsing data Windtunnel, barangkali ada tabel ganda didalam data print windtunnel.")
 
 
 if __name__ == "__main__":
