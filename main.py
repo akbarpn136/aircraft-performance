@@ -45,7 +45,7 @@ def calc_trim(df):
         """Fungsi ini digunakan untuk mendeteksi perubahan tanda positif dan negatif dalam kolom yang didefinisikan dan
         dibuat private function"""
 
-        trim = []
+        trim = {}
 
         for col in column_names:
             # mencari pola tanda positif negatif dalam kolom
@@ -58,15 +58,17 @@ def calc_trim(df):
             df_positive = data.loc[diff_positive[diff_positive != 0].index]
 
             # pilih kolom yang ditampilkan dan tampilkan satu
-            df_positive = df_positive[f"TRIM_{col}"].head(1).values
+            df_positive = df_positive[["RUN", f"TRIM_{col}"]].head(1)
 
-            trim.append(df_positive)
+            if df_positive.size > 0:
+                trim["RUN"] = df_positive["RUN"].values[0]
+                trim[f"TRIM_{col}"] = df_positive[f"TRIM_{col}"].values[0]
 
-        return da.concatenate(trim, axis=0).compute()
+        return trim
 
     df = df.map_partitions(__get_trim_data, unique_columns)
 
-    return unique_columns, df.compute()
+    return df.compute()
 
 
 def process():
@@ -75,7 +77,7 @@ def process():
 
     # Membuat kolom dinamis sesuai variasi CG yang diinginkan misalkan 20 untuk 20% dan seterusnya
     df = column_builder(df, 20, 30)
-    print(calc_trim(df))
+    print(calc_trim(df).tolist())
 
 
 if __name__ == "__main__":
