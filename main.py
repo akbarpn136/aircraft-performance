@@ -75,17 +75,38 @@ def calc_trim(df):
     return df.compute()
 
 
+def calc_performance(df, mass, area, rho=1.225):
+    import pandas as pd
+
+    df = pd.DataFrame.from_records(df).dropna()
+    df["RUN"] = df["RUN"].apply(lambda x: x.split(".")[0].replace("print", "RUN"))
+    df = df.set_index("RUN")
+    numbers = list(set([int(num.split("_")[-1]) for num in df.columns.values]))
+
+    for num in numbers:
+        df[f"CLCD_{num}"] = df[f"TRIM_CLCG_{num}"] / df[f"TRIM_CDCG_{num}"]
+        df[f"AIRSPEED_{num}"] = (2 * mass * 10 / (rho * area * df[f"TRIM_CLCG_{num}"])) ** 0.5
+        df[f"THRUST_{num}"] = 0.5 * rho * area * df[f"TRIM_CDCG_{num}"] * (df[f"AIRSPEED_{num}"] ** 2)
+        df[f"POWER_{num}"] = df[f"AIRSPEED_{num}"] * df[f"THRUST_{num}"]
+
+    return df
+
+
 def process():
     # Memuat keseluruhan data windtunnel berupa RUN numbers berdasarkan nama pesawat
-    df = load_data("male")
+    df = load_data("alap")
 
     # Membuat kolom dinamis sesuai variasi CG yang diinginkan misalkan 20 untuk 20% dan seterusnya
     df = column_builder(df, 20, 30)
 
     try:
         trim = calc_trim(df).tolist()
-        clean_trim = [i for i in trim if i]
-        print(clean_trim)
+
+        mass = 1300
+        area = 12.8
+        performance = calc_performance(trim, mass, area)
+
+        performance.to_json("res.json", orient="columns")
 
     except ValueError:
         print("Ada kesalahan saat Parsing data Windtunnel, barangkali ada tabel ganda didalam data print windtunnel.")
