@@ -37,13 +37,15 @@ def column_builder(df, start=20, stop=40, step=5):
         else:
             df[col] = df["CM25"] + (cg_position - 0.25) * df[coef_selection]
 
-    return df.drop(["ALPHA", "CL", "CD", "CM25"], axis=1)
+    return df.drop(["CL", "CD", "CM25"], axis=1)
 
 
 def calc_trim(df):
     """Fungsi ini digunakan untuk menghitung koefisien kondisi trim"""
 
-    unique_columns = list(set([col.replace("TRIM_", "") for col in df.columns.values if col != "RUN"]))
+    unique_columns = list(
+        set([col.replace("TRIM_", "") for col in df.columns.values if col != "RUN" and col != "ALPHA"])
+    )
 
     def __get_trim_data(data, column_names):
         """Fungsi ini digunakan untuk mendeteksi perubahan tanda positif dan negatif dalam kolom yang didefinisikan dan
@@ -62,9 +64,10 @@ def calc_trim(df):
             df_positive = data.loc[diff_positive[diff_positive != 0].index]
 
             # pilih kolom yang ditampilkan dan tampilkan satu
-            df_positive = df_positive[["RUN", f"TRIM_{col}"]].head(1)
+            df_positive = df_positive[["RUN", "ALPHA", f"TRIM_{col}"]].head(1)
 
             if df_positive.size > 0:
+                trim["ALPHA"] = df_positive["ALPHA"].values[0]
                 trim["RUN"] = df_positive["RUN"].values[0]
                 trim[f"TRIM_{col}"] = df_positive[f"TRIM_{col}"].values[0]
 
@@ -81,7 +84,7 @@ def calc_performance(df, mass, area, rho=1.225):
     df = pd.DataFrame.from_records(df).dropna()
     df["RUN"] = df["RUN"].apply(lambda x: x.split(".")[0].replace("print", "RUN"))
     df = df.set_index("RUN")
-    numbers = list(set([int(num.split("_")[-1]) for num in df.columns.values]))
+    numbers = list(set([int(num.split("_")[-1]) for num in df.columns.values if "ALPHA" not in num.split("_")[-1]]))
 
     for num in numbers:
         df[f"CLCD_{num}"] = df[f"TRIM_CLCG_{num}"] / df[f"TRIM_CDCG_{num}"]
