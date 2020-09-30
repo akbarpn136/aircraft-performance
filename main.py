@@ -4,10 +4,14 @@ from dask import (dataframe as dd, array as da)
 def load_data(projectname):
     """Fungsi untuk baca dan olah data"""
 
-    kolom = ["RUN", "V0", "Q0", "ALPHA", "BETA", "CL", "CD", "CM25", "CY", "CYAW", "CROLL"]
+    start = 32
+    kolom = ["V0", "Q0", "ALPHA", "BETA", "CL", "CD", "CM25", "CY", "CYAW", "CROLL"]
 
-    df = dd.read_csv(f"data/{projectname}/run*.csv", sep="\t", header=None, names=kolom)
-    df = df[["RUN", "ALPHA", "CL", "CD", "CM25"]]
+    df = dd.read_fwf(f"data/{projectname}/print*", header=None, skiprows=start, skipfooter=2, include_path_column=True,
+                     names=kolom)
+    df = df[["path", "ALPHA", "CL", "CD", "CM25"]]
+    df["RUN"] = df["path"].apply(lambda x: x.split("/")[-1], meta=("path", "string"))
+    df = df.drop(["path"], axis=1)
 
     return df
 
@@ -33,19 +37,21 @@ def column_builder(df, start=20, stop=40, step=5):
         else:
             df[col] = df["CM25"] + (cg_position - 0.25) * df[coef_selection]
 
-    return df.drop(["ALPHA", "CL", "CD", "CM25"], axis=1)
+    return df.drop(["CL", "CD", "CM25"], axis=1)
 
 
 def calc_trim(df):
     """Fungsi ini digunakan untuk menghitung koefisien kondisi trim"""
 
-    unique_columns = list(set([col.replace("TRIM_", "") for col in df.columns.values if col != "RUN"]))
+    unique_columns = list(
+        set([col.replace("TRIM_", "") for col in df.columns.values if col != "RUN" and col != "ALPHA"])
+    )
 
     def __get_trim_data(data, column_names):
         """Fungsi ini digunakan untuk mendeteksi perubahan tanda positif dan negatif dalam kolom yang didefinisikan dan
         dibuat private function"""
 
-        trim = []
+        trim = {}
 
         for col in column_names:
             # mencari pola tanda positif negatif dalam kolom
@@ -58,24 +64,55 @@ def calc_trim(df):
             df_positive = data.loc[diff_positive[diff_positive != 0].index]
 
             # pilih kolom yang ditampilkan dan tampilkan satu
-            df_positive = df_positive[f"TRIM_{col}"].head(1).values
+            df_positive = df_positive[["RUN", "ALPHA", f"TRIM_{col}"]].head(1)
 
-            trim.append(df_positive)
+            if df_positive.size > 0:
+                trim["ALPHA"] = df_positive["ALPHA"].values[0]
+                trim["RUN"] = df_positive["RUN"].values[0]
+                trim[f"TRIM_{col}"] = df_positive[f"TRIM_{col}"].values[0]
 
-        return da.concatenate(trim, axis=0).compute()
+        return trim
 
     df = df.map_partitions(__get_trim_data, unique_columns)
 
-    return unique_columns, df.compute()
+    return df.compute()
+
+
+def calc_performance(df, mass, area, rho=1.225):
+    import pandas as pd
+
+    df = pd.DataFrame.from_records(df).dropna()
+    df["RUN"] = df["RUN"].apply(lambda x: x.split(".")[0].replace("print", "RUN"))
+    df = df.set_index("RUN")
+    numbers = list(set([int(num.split("_")[-1]) for num in df.columns.values if "ALPHA" not in num.split("_")[-1]]))
+
+    for num in numbers:
+        df[f"CLCD_{num}"] = df[f"TRIM_CLCG_{num}"] / df[f"TRIM_CDCG_{num}"]
+        df[f"AIRSPEED_{num}"] = (2 * mass * 10 / (rho * area * df[f"TRIM_CLCG_{num}"])) ** 0.5
+        df[f"THRUST_{num}"] = 0.5 * rho * area * df[f"TRIM_CDCG_{num}"] * (df[f"AIRSPEED_{num}"] ** 2)
+        df[f"POWER_{num}"] = df[f"AIRSPEED_{num}"] * df[f"THRUST_{num}"]
+
+    return df
 
 
 def process():
     # Memuat keseluruhan data windtunnel berupa RUN numbers berdasarkan nama pesawat
-    df = load_data("male")
+    df = load_data("alap")
 
     # Membuat kolom dinamis sesuai variasi CG yang diinginkan misalkan 20 untuk 20% dan seterusnya
     df = column_builder(df, 20, 30)
-    print(calc_trim(df))
+
+    try:
+        trim = calc_trim(df).tolist()
+
+        mass = 1300
+        area = 12.8
+        performance = calc_performance(trim, mass, area)
+
+        performance.to_json("res.json", orient="columns")
+
+    except ValueError:
+        print("Ada kesalahan saat Parsing data Windtunnel, barangkali ada tabel ganda didalam data print windtunnel.")
 
 
 if __name__ == "__main__":
