@@ -134,4 +134,4 @@ dmypy.json
 
 # data
 *.csv
-data/*
+*.json
